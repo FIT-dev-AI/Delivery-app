@@ -1,0 +1,192 @@
+### Đăng ký Khách Hàng
+POST http://localhost:3000/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Nguyễn Văn A",
+  "email": "customer@test.com",
+  "password": "123456",
+  "role": "customer",
+  "phone": "0123456789"
+}
+
+###
+
+### Đăng ký Shipper
+POST http://localhost:3000/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Trần Văn B",
+  "email": "shipper@test.com",
+  "password": "123456",
+  "role": "shipper",
+  "phone": "0987654321"
+}
+
+###
+
+### Đăng nhập Khách Hàng
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "customer@test.com",
+  "password": "123456"
+}
+
+###
+
+### Đăng nhập Shipper
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "shipper@test.com",
+  "password": "123456"
+}
+
+###
+
+### Test Validation - Email không hợp lệ
+POST http://localhost:3000/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Test User",
+  "email": "invalid-email",
+  "password": "123456",
+  "role": "customer",
+  "phone": "0123456789"
+}
+
+###
+
+### Test Validation - Password quá ngắn
+POST http://localhost:3000/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Test User",
+  "email": "test@example.com",
+  "password": "123",
+  "role": "customer",
+  "phone": "0123456789"
+}
+
+###
+
+### Test Validation - Role không hợp lệ
+POST http://localhost:3000/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Test User",
+  "email": "test@example.com",
+  "password": "123456",
+  "role": "invalid_role",
+  "phone": "0123456789"
+}
+
+###
+
+@token = TOKEN_TỪ_ĐĂNG_NHẬP_BÊN_TRÊN
+
+###
+
+### Tạo Đơn Hàng
+POST http://localhost:3000/api/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "pickup_lat": 10.762622,
+  "pickup_lng": 106.660172,
+  "pickup_address": "Landmark 81, Vinhomes Central Park, TP.HCM",
+  "delivery_lat": 10.772431,
+  "delivery_lng": 106.698265,
+  "delivery_address": "Tòa nhà Bitexco, Quận 1, TP.HCM"
+}
+
+###
+
+### Lấy Tất Cả Đơn Hàng
+GET http://localhost:3000/api/orders
+Authorization: Bearer {{token}}
+
+###
+
+### Lấy Đơn Hàng Theo Trạng Thái
+GET http://localhost:3000/api/orders?status=pending
+Authorization: Bearer {{token}}
+
+###
+
+### Lấy Chi Tiết Đơn Hàng
+GET http://localhost:3000/api/orders/1
+Authorization: Bearer {{token}}
+
+###
+
+### Phân Công Shipper (dùng ID shipper từ đăng ký)
+PUT http://localhost:3000/api/orders/1/assign
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "shipperId": 2
+}
+
+###
+
+### Cập Nhật Trạng Thái Đơn Hàng
+PUT http://localhost:3000/api/orders/1/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "picked_up",
+  "notes": "Đã lấy hàng từ người gửi"
+}
+
+###
+
+### Upload Ảnh Xác Nhận Giao Hàng
+PUT http://localhost:3000/api/orders/1/proof
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "proof_image_base64": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD..."
+}
+
+###
+
+### Cập Nhật Vị Trí Shipper
+POST http://localhost:3000/api/tracking/update
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "shipper_id": 2,
+  "latitude": 10.762622,
+  "longitude": 106.660172
+}
+
+###
+
+### Lấy Vị Trí Hiện Tại Của Shipper
+GET http://localhost:3000/api/tracking/shipper/2
+Authorization: Bearer {{token}}
+
+###
+
+### Lấy Lịch Sử Vị Trí Của Đơn Hàng
+GET http://localhost:3000/api/tracking/order/1/history
+Authorization: Bearer {{token}}
+
+###
+
+### Lấy Thống Kê Dashboard
+GET http://localhost:3000/api/stats/dashboard
+Authorization: Bearer {{token}}

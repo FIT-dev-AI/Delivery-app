@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenStreetMap + Leaflet Routing</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Leaflet Routing Machine CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            overflow: hidden;
+        }
+        
+        #map {
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        /* Custom marker colors */
+        .marker-green {
+            filter: hue-rotate(120deg);
+        }
+        
+        .marker-red {
+            filter: hue-rotate(0deg);
+        }
+        
+        /* Info panel */
+        .info-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            max-width: 300px;
+        }
+        
+        .info-panel h3 {
+            margin: 0 0 10px 0;
+            color: #FF6F00;
+        }
+        
+        .info-panel .route-info {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 6px;
+        }
+        
+        .info-panel .route-info strong {
+            color: #333;
+        }
+        
+        /* Custom routing control styling */
+        .leaflet-routing-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+    </style>
+</head>
+<body>
+    <!-- Map container -->
+    <div id="map"></div>
+    
+    <!-- Info panel -->
+    <div class="info-panel">
+        <h3>🗺️ OpenStreetMap Demo</h3>
+        <div class="route-info">
+            <strong>Start:</strong> Saigon Centre, Quận 1<br>
+            <strong>End:</strong> Phú Mỹ Hưng, Quận 7
+        </div>
+        <div class="route-info" id="distance-info">
+            <strong>Distance:</strong> Calculating...<br>
+            <strong>Duration:</strong> Calculating...
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Leaflet Routing Machine JS -->
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+
+    <script>
+        // ============================================
+        // 🗺️ OPENSTREETMAP WITH ROUTING
+        // ============================================
+        
+        // Configuration
+        const CONFIG = {
+            center: [10.7769, 106.7009], // Ho Chi Minh City
+            zoom: 13,
+            pickup: {
+                lat: 10.762622,
+                lng: 106.660172,
+                name: 'Lấy hàng',
+                address: 'Saigon Centre, Quận 1'
+            },
+            delivery: {
+                lat: 10.8231,
+                lng: 106.6297,
+                name: 'Giao hàng',
+                address: 'Phú Mỹ Hưng, Quận 7'
+            }
+        };
+
+        // Initialize map
+        const map = L.map('map').setView(CONFIG.center, CONFIG.zoom);
+
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        // Custom icons
+        const pickupIcon = L.icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        });
+
+        const deliveryIcon = L.icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        });
+
+        // Add markers
+        const pickupMarker = L.marker([CONFIG.pickup.lat, CONFIG.pickup.lng], {
+            icon: pickupIcon
+        }).addTo(map);
+        
+        pickupMarker.bindPopup(`
+            <div style="text-align: center;">
+                <strong style="color: #4CAF50;">📦 ${CONFIG.pickup.name}</strong><br>
+                <small>${CONFIG.pickup.address}</small>
+            </div>
+        `);
+
+        const deliveryMarker = L.marker([CONFIG.delivery.lat, CONFIG.delivery.lng], {
+            icon: deliveryIcon
+        }).addTo(map);
+        
+        deliveryMarker.bindPopup(`
+            <div style="text-align: center;">
+                <strong style="color: #F44336;">🏠 ${CONFIG.delivery.name}</strong><br>
+                <small>${CONFIG.delivery.address}</small>
+            </div>
+        `);
+
+        // Add routing
+        const routingControl = L.Routing.control({
+            waypoints: [
+                L.latLng(CONFIG.pickup.lat, CONFIG.pickup.lng),
+                L.latLng(CONFIG.delivery.lat, CONFIG.delivery.lng)
+            ],
+            routeWhileDragging: true,
+            showAlternatives: false,
+            lineOptions: {
+                styles: [
+                    {
+                        color: '#FF6F00',
+                        opacity: 0.8,
+                        weight: 6
+                    }
+                ]
+            },
+            createMarker: function() {
+                return null; // Don't create default markers (we already have custom ones)
+            },
+            router: L.Routing.osrmv1({
+                serviceUrl: 'https://router.project-osrm.org/route/v1',
+                profile: 'driving'
+            }),
+            formatter: new L.Routing.Formatter({
+                language: 'vi'
+            })
+        }).addTo(map);
+
+        // Listen for route calculation
+        routingControl.on('routesfound', function(e) {
+            const routes = e.routes;
+            const summary = routes[0].summary;
+            
+            // Update info panel
+            const distanceKm = (summary.totalDistance / 1000).toFixed(2);
+            const durationMin = Math.round(summary.totalTime / 60);
+            
+            document.getElementById('distance-info').innerHTML = `
+                <strong>Distance:</strong> ${distanceKm} km<br>
+                <strong>Duration:</strong> ${durationMin} phút
+            `;
+            
+            console.log('✅ Route calculated:', {
+                distance: distanceKm + ' km',
+                duration: durationMin + ' minutes',
+                coordinates: routes[0].coordinates.length + ' points'
+            });
+        });
+
+        // Fit bounds to show entire route
+        setTimeout(() => {
+            const bounds = L.latLngBounds([
+                [CONFIG.pickup.lat, CONFIG.pickup.lng],
+                [CONFIG.delivery.lat, CONFIG.delivery.lng]
+            ]);
+            map.fitBounds(bounds, { padding: [50, 50] });
+        }, 1000);
+
+        console.log('🗺️ OpenStreetMap initialized successfully!');
+    </script>
+</body>
+</html>
