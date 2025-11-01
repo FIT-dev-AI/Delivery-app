@@ -2,7 +2,7 @@
 // 🔧 FINAL VERSION - NO GOOGLE API KEYS NEEDED FOR ROUTING/SEARCH
 
 class ApiConstants {
-  static const String _localIP = '192.168.1.5';
+  static const String _localIP = '192.168.1.4';
   static const String baseUrl = 'http://$_localIP:3000/api';
   static const String socketUrl = 'http://$_localIP:3000';
 }

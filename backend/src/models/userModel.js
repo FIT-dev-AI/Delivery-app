@@ -1,5 +1,5 @@
 // backend/src/models/userModel.js
-// ✅ UPDATED: Enhanced logging and verification for online status
+// ✅ UPDATED: Enhanced logging and verification for online status + Admin functions
 
 const db = require('../config/database');
 const bcrypt = require('bcrypt');
@@ -147,13 +147,13 @@ const verifyPassword = async (plainPassword, hashedPassword) => {
 };
 
 /**
- * Delete user (soft delete by setting active = 0)
+ * Delete user (soft delete by setting is_active = 0)
  */
 const deleteUser = async (userId) => {
   try {
     const query = `
       UPDATE users
-      SET active = 0
+      SET is_active = 0
       WHERE id = ?
     `;
 
@@ -305,6 +305,64 @@ const updateOnlineStatus = async (userId, isOnline) => {
   }
 };
 
+/**
+ * ✅ NEW: Update user status (active/inactive) - Admin only
+ */
+const updateUserStatus = async (userId, isActive) => {
+  try {
+    const activeValue = isActive ? 1 : 0;
+    
+    const query = `
+      UPDATE users
+      SET is_active = ?
+      WHERE id = ?
+    `;
+
+    const [result] = await db.execute(query, [activeValue, userId]);
+    
+    if (result.affectedRows === 0) {
+      throw new Error('User not found or no changes made');
+    }
+    
+    console.log(`✅ User #${userId} status updated to ${isActive ? 'ACTIVE' : 'INACTIVE'}`);
+    return true;
+  } catch (error) {
+    console.error('Error updating user status:', error);
+    throw error;
+  }
+};
+
+/**
+ * ✅ NEW: Get online shippers - Admin only
+ */
+const getOnlineShippers = async () => {
+  try {
+    const query = `
+      SELECT 
+        id, 
+        name, 
+        email, 
+        phone, 
+        is_online,
+        last_online,
+        created_at
+      FROM users
+      WHERE role = 'shipper' 
+        AND is_online = 1
+        AND is_active = 1
+      ORDER BY last_online DESC
+    `;
+
+    const [shippers] = await db.execute(query);
+    
+    console.log(`📊 Found ${shippers.length} online shipper(s)`);
+    return shippers;
+  } catch (error) {
+    console.error('Error getting online shippers:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   createUser,
   getUserById,
@@ -317,4 +375,6 @@ module.exports = {
   getAllUsers,
   getUserStats,
   updateOnlineStatus,
+  updateUserStatus,
+  getOnlineShippers,
 };

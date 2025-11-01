@@ -10,10 +10,12 @@ import 'data/services/auth_service.dart';
 import 'data/services/order_service.dart';
 import 'data/services/location_service.dart';
 import 'data/services/stats_service.dart';
+import 'data/services/admin_service.dart'; // ✅ NEW
 import 'data/providers/auth_provider.dart';
 import 'data/providers/order_provider.dart';
 import 'data/providers/location_provider.dart';
 import 'data/providers/stats_provider.dart';
+import 'data/providers/admin_provider.dart'; // ✅ NEW
 import 'presentation/screens/login_screen.dart';
 import 'presentation/screens/main_navigation_screen.dart';
 
@@ -51,6 +53,7 @@ class MyApp extends StatelessWidget {
     final authService = AuthService(apiService);
     final orderService = OrderService(apiService);
     final statsService = StatsService(apiService);
+    final adminService = AdminService(apiService); // ✅ NEW
 
     return MultiProvider(
       providers: [
@@ -74,6 +77,11 @@ class MyApp extends StatelessWidget {
         // Stats Provider
         ChangeNotifierProvider(
           create: (_) => StatsProvider(statsService),
+        ),
+
+        // ✅ NEW: Admin Provider
+        ChangeNotifierProvider(
+          create: (_) => AdminProvider(adminService),
         ),
       ],
       child: MaterialApp(
@@ -169,7 +177,7 @@ class _SplashScreenState extends State<SplashScreen> {
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.2),
+                        color: Colors.black.withAlpha(51), // ✅ withAlpha instead of withOpacity
                         blurRadius: 30,
                         offset: const Offset(0, 10),
                       ),

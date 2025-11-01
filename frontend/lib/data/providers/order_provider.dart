@@ -108,13 +108,13 @@ class OrderProvider extends ChangeNotifier {
     }
   }
 
-  // Phân công shipper
-  Future<void> acceptOrder(int orderId, int shipperId) async {
+  // ✅ UPDATED: Shipper accepts order (self-assign) - uses new /accept endpoint
+  Future<void> acceptOrder(int orderId) async {
     try {
       if (hasActiveOrder) {
         throw Exception('Bạn đang có đơn hàng #${_activeOrder!.id} chưa hoàn thành');
       }
-      await _orderService.assignShipper(orderId, shipperId);
+      await _orderService.acceptOrder(orderId); // ✅ NEW: Uses /accept endpoint
       // ===> THAY ĐỔI Ở ĐÂY <====
       // Tải lại cả chi tiết và danh sách
       await fetchOrderById(orderId); // Cập nhật màn hình chi tiết

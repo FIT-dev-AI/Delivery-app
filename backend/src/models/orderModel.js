@@ -96,8 +96,10 @@ const assignShipper = async (orderId, shipperId) => {
 };
 
 const updateProofImage = async (orderId, imageBase64) => {
-  await db.execute('UPDATE orders SET proof_image_base64 = ?, status = ? WHERE id = ?', [imageBase64, 'delivered', orderId]);
-  console.log(`✅ Order #${orderId} marked as delivered with proof image`);
+  // ✅ FIXED: Only update proof_image_base64, don't change status
+  // Status should be updated separately via updateOrderStatus
+  await db.execute('UPDATE orders SET proof_image_base64 = ? WHERE id = ?', [imageBase64, orderId]);
+  console.log(`✅ Order #${orderId} proof image updated`);
   return true;
 };
 

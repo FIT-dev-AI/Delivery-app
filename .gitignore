@@ -47,4 +47,8 @@ build/
 **/google-services.json
 **/GoogleService-Info.plist
 
+# Documentation files (internal only)
+DEVELOPMENT_PLAN.md
+API_DOCS.md
+MEMORY_BANK.md
 

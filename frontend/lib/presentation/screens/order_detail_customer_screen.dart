@@ -1,3 +1,6 @@
+// frontend/lib/presentation/screens/order_detail_customer_screen.dart
+// ✅ MERGED: Combined old working logic with new features (Admin Actions, Package Info Card)
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -6,10 +9,13 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/pricing_constants.dart';
 import '../../data/models/order_model.dart';
 import '../../data/providers/order_provider.dart';
+import '../../data/providers/auth_provider.dart';
 import '../widgets/location_stepper.dart';
 import '../widgets/status_badge.dart';
 import '../widgets/map_widget.dart';
 import '../widgets/pricing_card.dart';
+import '../widgets/package_info_card.dart';
+import '../widgets/admin/admin_action_sheet.dart';
 import 'package:cherry_toast/cherry_toast.dart';
 
 class OrderDetailCustomerScreen extends StatefulWidget {
@@ -23,6 +29,7 @@ class OrderDetailCustomerScreen extends StatefulWidget {
 
 class _OrderDetailCustomerScreenState
     extends State<OrderDetailCustomerScreen> {
+  // ✅ FIXED: Keep _currentOrder state to ensure proper updates after reassign
   late Order _currentOrder;
   final DraggableScrollableController _sheetController =
       DraggableScrollableController();
@@ -42,10 +49,13 @@ class _OrderDetailCustomerScreenState
     super.dispose();
   }
 
+  // ✅ FIXED: Refresh order and update local state (from old working file)
   Future<void> _refreshOrder() async {
     if (!mounted) return;
     final orderProvider = Provider.of<OrderProvider>(context, listen: false);
     await orderProvider.fetchOrderById(_currentOrder.id);
+    
+    // ✅ CRITICAL: Update local state after fetch (from old working file)
     if (mounted && orderProvider.selectedOrder != null) {
       setState(() {
         _currentOrder = orderProvider.selectedOrder!;
@@ -55,127 +65,164 @@ class _OrderDetailCustomerScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: textDark,
-        actions: [
-          IconButton(
-            onPressed: _refreshOrder,
-            icon: const CircleAvatar(
-              backgroundColor: Colors.white,
-              child: Icon(Icons.refresh_rounded, color: textDark),
-            ),
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          // 🗺️ Google Maps (full screen)
-          MapWidget(order: _currentOrder),
+    // ✅ FIXED: Get AuthProvider at top level (before Consumer) to avoid conflicts
+    final authProvider = context.read<AuthProvider>();
+    final user = authProvider.user;
 
-          // 📱 DraggableScrollableSheet
-          DraggableScrollableSheet(
-            controller: _sheetController,
-            initialChildSize: 0.30, // Slightly larger for pricing
-            minChildSize: 0.30,
-            maxChildSize: 0.9,
-            snap: true,
-            snapSizes: const [0.30, 0.5, 0.9],
-            builder: (context, scrollController) {
-              return Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(24)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withAlpha(25),
-                      blurRadius: 15,
-                      offset: const Offset(0, -5),
-                    ),
-                  ],
+    // ✅ MERGED: Use Consumer for reactive updates, but keep _currentOrder state
+    return Consumer<OrderProvider>(
+      builder: (context, orderProvider, child) {
+        // ✅ FIXED: Use selectedOrder from provider if it's for the same order
+        // Otherwise use _currentOrder (which is maintained by setState in _refreshOrder)
+        final Order currentOrder;
+        if (orderProvider.selectedOrder != null && 
+            orderProvider.selectedOrder!.id == widget.order.id) {
+          // Provider has fresh data for this order - use it
+          currentOrder = orderProvider.selectedOrder!;
+          // Sync _currentOrder if different (one-time sync)
+          if (_currentOrder.id == currentOrder.id && _currentOrder != currentOrder) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) setState(() => _currentOrder = currentOrder);
+            });
+          }
+        } else {
+          // Use local state (which is updated by _refreshOrder)
+          currentOrder = _currentOrder;
+        }
+
+        return Scaffold(
+          extendBodyBehindAppBar: true,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            foregroundColor: textDark,
+            actions: [
+              IconButton(
+                onPressed: _refreshOrder,
+                icon: const CircleAvatar(
+                  backgroundColor: Colors.white,
+                  child: Icon(Icons.refresh_rounded, color: textDark),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 🎯 Drag handle - TAP TO EXPAND
-                    GestureDetector(
-                      onTap: () {
-                        _sheetController.animateTo(
-                          0.5,
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                      },
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Center(
+              ),
+            ],
+          ),
+          body: Stack(
+            children: [
+              // 🗺️ Google Maps (full screen)
+              MapWidget(order: currentOrder),
+
+              // 📱 DraggableScrollableSheet
+              DraggableScrollableSheet(
+                controller: _sheetController,
+                initialChildSize: 0.30,
+                minChildSize: 0.30,
+                maxChildSize: 0.9,
+                snap: true,
+                snapSizes: const [0.30, 0.5, 0.9],
+                builder: (context, scrollController) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius:
+                          const BorderRadius.vertical(top: Radius.circular(24)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withAlpha(25),
+                          blurRadius: 15,
+                          offset: const Offset(0, -5),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 🎯 Drag handle - TAP TO EXPAND
+                        GestureDetector(
+                          onTap: () {
+                            _sheetController.animateTo(
+                              0.5,
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeInOut,
+                            );
+                          },
                           child: Container(
-                            width: 40,
-                            height: 5,
-                            decoration: BoxDecoration(
-                              color: Colors.grey[300],
-                              borderRadius: BorderRadius.circular(2.5),
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: Center(
+                              child: Container(
+                                width: 40,
+                                height: 5,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[300],
+                                  borderRadius: BorderRadius.circular(2.5),
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
 
-                    // 📦 Content
-                    Expanded(
-                      child: ListView(
-                        controller: scrollController,
-                        padding: EdgeInsets.zero,
-                        physics: const ClampingScrollPhysics(),
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Order header
-                                _buildOrderHeader(),
-                                const SizedBox(height: 12),
+                        // 📦 Content
+                        Expanded(
+                          child: ListView(
+                            controller: scrollController,
+                            padding: EdgeInsets.zero,
+                            physics: const ClampingScrollPhysics(),
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Order header
+                                    _buildOrderHeader(currentOrder),
+                                    const SizedBox(height: 12),
 
-                                // Progress indicator
-                                _buildProgressIndicator(),
-                                const SizedBox(height: 12),
+                                    // Progress indicator
+                                    _buildProgressIndicator(currentOrder),
+                                    const SizedBox(height: 12),
 
-                                // ✅ NEW: Pricing section (prominent)
-                                if (_currentOrder.hasPricing)
-                                  _buildPricingSection(),
+                                    // ✅ NEW: Package Info Card (Category + Weight)
+                                    PackageInfoCard(
+                                      order: currentOrder,
+                                      showDistance: true,
+                                      showPricing: false, // Pricing has its own card below
+                                    ),
 
-                                // Quick action (Call shipper if available)
-                                _buildQuickAction(),
-                                const SizedBox(height: 16),
+                                    // Pricing section (prominent)
+                                    if (currentOrder.hasPricing)
+                                      _buildPricingSection(currentOrder),
 
-                                // Expandable details
-                                _buildExpandableDetails(),
-                                const SizedBox(height: 24),
-                              ],
-                            ),
+                                    // ✅ NEW: Admin Actions (if admin user)
+                                    _buildAdminActionsSection(currentOrder, user),
+
+                                    // Quick action (Call shipper if available)
+                                    _buildQuickAction(currentOrder),
+                                    const SizedBox(height: 16),
+
+                                    // Expandable details
+                                    _buildExpandableDetails(currentOrder),
+                                    const SizedBox(height: 24),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              );
-            },
+                  );
+                },
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
   // --- UI COMPONENTS ---
 
-  Widget _buildOrderHeader() {
+  Widget _buildOrderHeader(Order order) {
     return Row(
       children: [
         Expanded(
@@ -183,7 +230,7 @@ class _OrderDetailCustomerScreenState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Đơn hàng #${_currentOrder.id}',
+                'Đơn hàng #${order.id}',
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -192,7 +239,7 @@ class _OrderDetailCustomerScreenState
               ),
               const SizedBox(height: 2),
               Text(
-                DateFormat('dd/MM/yyyy HH:mm').format(_currentOrder.createdAt),
+                DateFormat('dd/MM/yyyy HH:mm').format(order.createdAt),
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.grey[600],
@@ -201,13 +248,13 @@ class _OrderDetailCustomerScreenState
             ],
           ),
         ),
-        StatusBadge(order: _currentOrder),
+        StatusBadge(order: order),
       ],
     );
   }
 
-  Widget _buildProgressIndicator() {
-    final currentStep = _getCurrentStep();
+  Widget _buildProgressIndicator(Order order) {
+    final currentStep = _getCurrentStep(order);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -266,8 +313,8 @@ class _OrderDetailCustomerScreenState
     );
   }
 
-  int _getCurrentStep() {
-    switch (_currentOrder.status) {
+  int _getCurrentStep(Order order) {
+    switch (order.status) {
       case 'pending':
         return 0;
       case 'assigned':
@@ -297,21 +344,20 @@ class _OrderDetailCustomerScreenState
     }
   }
 
-  // ✅ UPDATED: Use PricingCard widget for consistency
-  Widget _buildPricingSection() {
-    if (!_currentOrder.hasPricing) return const SizedBox.shrink();
+  Widget _buildPricingSection(Order order) {
+    if (!order.hasPricing) return const SizedBox.shrink();
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: PricingCard(
-        distanceKm: _currentOrder.distanceKm!,
-        totalAmount: _currentOrder.totalAmount!,
+        distanceKm: order.distanceKm!,
+        totalAmount: order.totalAmount!,
         showBreakdown: true,
         onTap: () {
           final pricing = PricingResult(
-            distanceKm: _currentOrder.distanceKm!,
-            totalAmount: _currentOrder.totalAmount!,
-            shipperAmount: _currentOrder.shipperAmount!,
-            appCommission: _currentOrder.appCommission!,
+            distanceKm: order.distanceKm!,
+            totalAmount: order.totalAmount!,
+            shipperAmount: order.shipperAmount!,
+            appCommission: order.appCommission!,
           );
           showDialog(
             context: context,
@@ -334,18 +380,17 @@ class _OrderDetailCustomerScreenState
     );
   }
 
-  Widget _buildQuickAction() {
+  Widget _buildQuickAction(Order order) {
     // Show call button if shipper assigned and has phone
-    if (_currentOrder.shipperId != null &&
-        _currentOrder.shipperPhone != null) {
+    if (order.shipperId != null && order.shipperPhone != null) {
       return Container(
         margin: const EdgeInsets.only(bottom: 12),
-        child: _buildCallShipperButton(),
+        child: _buildCallShipperButton(order),
       );
     }
 
     // Show searching banner if pending
-    if (_currentOrder.status == 'pending') {
+    if (order.status == 'pending') {
       return Container(
         margin: const EdgeInsets.only(bottom: 12),
         child: _buildSearchingBanner(),
@@ -355,7 +400,7 @@ class _OrderDetailCustomerScreenState
     return const SizedBox.shrink();
   }
 
-  Widget _buildCallShipperButton() {
+  Widget _buildCallShipperButton(Order order) {
     return Container(
       width: double.infinity,
       height: 48,
@@ -377,7 +422,7 @@ class _OrderDetailCustomerScreenState
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => _makePhoneCall(_currentOrder.shipperPhone!),
+          onTap: () => _makePhoneCall(order.shipperPhone!),
           borderRadius: BorderRadius.circular(12),
           child: const Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -463,7 +508,7 @@ class _OrderDetailCustomerScreenState
     );
   }
 
-  Widget _buildExpandableDetails() {
+  Widget _buildExpandableDetails(Order order) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -475,20 +520,21 @@ class _OrderDetailCustomerScreenState
         _buildSection(
           title: 'Lộ trình',
           icon: Icons.route_rounded,
-          child: LocationStepper(order: _currentOrder, isDetailed: true),
+          child: LocationStepper(order: order, isDetailed: true),
         ),
         const SizedBox(height: 16),
 
         // Shipper info (if assigned)
-        if (_currentOrder.shipperId != null)
+        // ✅ FIXED: Always check shipperId from Order object, never from AuthProvider
+        if (order.shipperId != null)
           _buildSection(
             title: 'Thông tin tài xế',
             icon: Icons.delivery_dining_rounded,
-            child: _buildShipperInfo(),
+            child: _buildShipperInfo(order),
           ),
 
         // Order notes (if any)
-        if (_currentOrder.notes != null && _currentOrder.notes!.isNotEmpty) ...[
+        if (order.notes != null && order.notes!.isNotEmpty) ...[
           const SizedBox(height: 16),
           _buildSection(
             title: 'Ghi chú',
@@ -500,7 +546,7 @@ class _OrderDetailCustomerScreenState
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                _currentOrder.notes!,
+                order.notes!,
                 style: const TextStyle(fontSize: 14),
               ),
             ),
@@ -510,7 +556,14 @@ class _OrderDetailCustomerScreenState
     );
   }
 
-  Widget _buildShipperInfo() {
+  // ✅ FIXED: Build shipper info ALWAYS from Order object, never from AuthProvider
+  // This ensures correct shipper info is displayed even after admin reassigns
+  Widget _buildShipperInfo(Order order) {
+    // ✅ CRITICAL: Always get shipper info from Order object
+    // Never use AuthProvider.user here - it could be admin or any logged-in user
+    final String shipperName = order.shipperName ?? 'Tài xế';
+    final String? shipperPhone = order.shipperPhone;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -538,7 +591,7 @@ class _OrderDetailCustomerScreenState
               shape: BoxShape.circle,
             ),
             child: const Icon(
-              Icons.person_rounded,
+              Icons.delivery_dining_rounded,
               color: Colors.white,
               size: 24,
             ),
@@ -550,14 +603,14 @@ class _OrderDetailCustomerScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _currentOrder.shipperName ?? 'Tài xế',
+                  shipperName, // ✅ From Order.shipperName, never from AuthProvider
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
                     color: textDark,
                   ),
                 ),
-                if (_currentOrder.shipperPhone != null) ...[
+                if (shipperPhone != null) ...[
                   const SizedBox(height: 4),
                   Row(
                     children: [
@@ -568,7 +621,7 @@ class _OrderDetailCustomerScreenState
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        _currentOrder.shipperPhone!,
+                        shipperPhone, // ✅ From Order.shipperPhone, never from AuthProvider
                         style: TextStyle(
                           fontSize: 13,
                           color: Colors.grey[700],
@@ -581,7 +634,7 @@ class _OrderDetailCustomerScreenState
             ),
           ),
           // Call button
-          if (_currentOrder.shipperPhone != null)
+          if (shipperPhone != null)
             Container(
               decoration: BoxDecoration(
                 color: successGreen,
@@ -595,7 +648,7 @@ class _OrderDetailCustomerScreenState
                 ],
               ),
               child: IconButton(
-                onPressed: () => _makePhoneCall(_currentOrder.shipperPhone!),
+                onPressed: () => _makePhoneCall(shipperPhone),
                 icon: const Icon(
                   Icons.phone_rounded,
                   color: Colors.white,
@@ -633,6 +686,102 @@ class _OrderDetailCustomerScreenState
         const SizedBox(height: 10),
         child,
       ],
+    );
+  }
+
+  // ✅ NEW: Admin Actions Section (only visible for admin users)
+  Widget _buildAdminActionsSection(Order order, user) {
+    // Only show for admin users
+    if (user == null || !user.isAdmin) {
+      return const SizedBox.shrink();
+    }
+
+    // Only show for orders that can be modified
+    if (order.status == 'delivered' || order.status == 'cancelled') {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF9C27B0).withAlpha(25),
+            const Color(0xFF9C27B0).withAlpha(13),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF9C27B0).withAlpha(76),
+          width: 2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.admin_panel_settings,
+                color: Color(0xFF9C27B0),
+                size: 24,
+              ),
+              SizedBox(width: 12),
+              Text(
+                'Hành động Admin',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: textDark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                final result = await showModalBottomSheet<Map<String, dynamic>>(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (ctx) => AdminActionSheet(order: order),
+                );
+                
+                if (result != null && mounted) {
+                  // Refresh order after admin action
+                  await _refreshOrder();
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('✅ ${result['message']}'),
+                      backgroundColor: successGreen,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF9C27B0),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(Icons.settings),
+              label: const Text(
+                'Quản lý đơn hàng',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

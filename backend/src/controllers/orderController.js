@@ -232,8 +232,11 @@ const orderController = {
   updateOrderStatus: async (req, res) => {
     try {
       const { id } = req.params;
-      const { status, notes } = req.body;
+      const { status, notes, photoUrl } = req.body;
+      const userId = req.user.id;
+      const userRole = req.user.role;
 
+      // ✅ Validate status
       const validStatuses = ['pending', 'assigned', 'picked_up', 'in_transit', 'delivered', 'cancelled'];
       if (!validStatuses.includes(status)) {
         return res.status(400).json({
@@ -242,7 +245,68 @@ const orderController = {
         });
       }
 
+      // ✅ Get order to check ownership
+      const order = await orderModel.getOrderById(id);
+      if (!order) {
+        return res.status(404).json({
+          success: false,
+          message: 'Không tìm thấy đơn hàng',
+        });
+      }
+
+      // ✅ PERMISSION CHECK
+      if (userRole === 'admin') {
+        // Admin can update any status for any order
+        console.log(`✅ Admin #${userId} updating order #${id} status to: ${status}`);
+      } else if (userRole === 'shipper') {
+        // Shipper can only update status for orders assigned to them
+        if (order.shipper_id !== userId) {
+          return res.status(403).json({
+            success: false,
+            message: 'Bạn không có quyền cập nhật đơn hàng này',
+          });
+        }
+
+        // ✅ Shipper can only update to: picked_up, in_transit, delivered
+        const allowedStatusesForShipper = ['picked_up', 'in_transit', 'delivered'];
+        if (!allowedStatusesForShipper.includes(status)) {
+          return res.status(403).json({
+            success: false,
+            message: `Tài xế chỉ có thể cập nhật trạng thái: ${allowedStatusesForShipper.join(', ')}`,
+          });
+        }
+
+        // ✅ Validate status transition for shipper
+        // Can only progress: assigned -> picked_up -> in_transit -> delivered
+        const validTransitions = {
+          'assigned': ['picked_up'],
+          'picked_up': ['in_transit'],
+          'in_transit': ['delivered'],
+        };
+
+        if (validTransitions[order.status] && !validTransitions[order.status].includes(status)) {
+          return res.status(400).json({
+            success: false,
+            message: `Không thể chuyển từ "${order.status}" sang "${status}". Chuyển đổi hợp lệ: ${validTransitions[order.status].join(', ')}`,
+          });
+        }
+
+        console.log(`✅ Shipper #${userId} updating order #${id} status: ${order.status} -> ${status}`);
+      } else {
+        // Customer cannot update order status
+        return res.status(403).json({
+          success: false,
+          message: 'Bạn không có quyền cập nhật trạng thái đơn hàng',
+        });
+      }
+
+      // ✅ Update status
       await orderModel.updateOrderStatus(id, status, notes);
+
+      // ✅ If photoUrl is provided and status is picked_up or delivered, update proof image
+      if (photoUrl && (status === 'picked_up' || status === 'delivered')) {
+        await orderModel.updateProofImage(id, photoUrl);
+      }
 
       return res.status(200).json({
         success: true,
@@ -258,11 +322,69 @@ const orderController = {
     }
   },
 
-  assignShipper: async (req, res) => {
+  // ✅ NEW: Shipper self-assign (accept order)
+  acceptOrder: async (req, res) => {
     try {
       const { id } = req.params;
       const shipperId = req.user.id;
 
+      // ✅ Validate shipper role
+      if (req.user.role !== 'shipper') {
+        return res.status(403).json({
+          success: false,
+          message: 'Chỉ tài xế mới có thể nhận đơn hàng',
+        });
+      }
+
+      // ✅ Validate shipper exists and is online
+      const db = require('../config/database');
+      const [shipperCheck] = await db.execute(
+        'SELECT id, name, role, is_online FROM users WHERE id = ? AND role = "shipper"',
+        [shipperId]
+      );
+
+      if (!shipperCheck || shipperCheck.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Tài xế không tồn tại',
+        });
+      }
+
+      // ✅ Check if shipper is online
+      if (shipperCheck[0].is_online !== 1 && shipperCheck[0].is_online !== true) {
+        return res.status(400).json({
+          success: false,
+          message: 'Bạn đang OFFLINE. Vui lòng bật trạng thái Online để nhận đơn.',
+        });
+      }
+
+      // ✅ Check if order exists and is pending
+      const order = await orderModel.getOrderById(id);
+      if (!order) {
+        return res.status(404).json({
+          success: false,
+          message: 'Không tìm thấy đơn hàng',
+        });
+      }
+
+      if (order.status !== 'pending') {
+        return res.status(400).json({
+          success: false,
+          message: 'Đơn hàng này đã được nhận bởi tài xế khác',
+        });
+      }
+
+      // ✅ Check if shipper has active orders
+      const activeOrders = await orderModel.getActiveOrdersByShipper(shipperId);
+      if (activeOrders && activeOrders.length > 0) {
+        const activeOrder = activeOrders[0];
+        return res.status(400).json({
+          success: false,
+          message: `Bạn đang có đơn hàng #${activeOrder.id} chưa hoàn thành. Vui lòng hoàn thành đơn hiện tại trước khi nhận đơn mới.`,
+        });
+      }
+
+      // ✅ Assign order to shipper
       const success = await orderModel.assignShipper(id, shipperId);
 
       if (!success) {
@@ -272,15 +394,88 @@ const orderController = {
         });
       }
 
+      console.log(`✅ Order #${id} accepted by shipper #${shipperId} (${shipperCheck[0].name})`);
+      
       return res.status(200).json({
         success: true,
         message: 'Nhận đơn hàng thành công',
       });
     } catch (error) {
-      console.error('❌ Error assigning shipper:', error);
+      console.error('❌ Error accepting order:', error);
       return res.status(500).json({
         success: false,
         message: 'Lỗi nhận đơn hàng',
+        error: error.message,
+      });
+    }
+  },
+
+  // ✅ UPDATED: Admin reassign (only for admin, requires shipper_id in body)
+  assignShipper: async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // ✅ FIXED: Admin reassign MUST provide shipper_id in body
+      if (!req.body.shipper_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'Vui lòng cung cấp shipper_id để phân công đơn hàng',
+        });
+      }
+
+      const shipperId = req.body.shipper_id;
+
+      // ✅ FIXED: Validate that the shipper exists and is actually a shipper
+      const db = require('../config/database');
+      const [shipperCheck] = await db.execute(
+        'SELECT id, name, role, is_online FROM users WHERE id = ? AND role = "shipper"',
+        [shipperId]
+      );
+
+      if (!shipperCheck || shipperCheck.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Shipper không tồn tại hoặc không phải là tài xế',
+        });
+      }
+
+      // ✅ FIXED: Check if shipper is online when admin reassigns
+      if (shipperCheck[0].is_online !== 1 && shipperCheck[0].is_online !== true) {
+        return res.status(400).json({
+          success: false,
+          message: 'Tài xế đang OFFLINE. Vui lòng bật trạng thái Online để nhận đơn.',
+        });
+      }
+
+      // ✅ Check if order exists
+      const order = await orderModel.getOrderById(id);
+      if (!order) {
+        return res.status(404).json({
+          success: false,
+          message: 'Không tìm thấy đơn hàng',
+        });
+      }
+
+      const success = await orderModel.assignShipper(id, shipperId);
+
+      if (!success) {
+        return res.status(400).json({
+          success: false,
+          message: 'Không thể phân công đơn hàng',
+        });
+      }
+
+      console.log(`✅ Order #${id} reassigned to shipper #${shipperId} (${shipperCheck[0].name}) by admin #${req.user.id}`);
+      
+      return res.status(200).json({
+        success: true,
+        message: `Đã phân công đơn hàng cho ${shipperCheck[0].name}`,
+      });
+    } catch (error) {
+      console.error('❌ Error assigning shipper:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Lỗi phân công đơn hàng',
         error: error.message,
       });
     }
@@ -290,11 +485,51 @@ const orderController = {
     try {
       const { id } = req.params;
       const { proof_image_base64 } = req.body;
+      const userId = req.user.id;
+      const userRole = req.user.role;
 
       if (!proof_image_base64) {
         return res.status(400).json({
           success: false,
           message: 'Thiếu ảnh xác nhận',
+        });
+      }
+
+      // ✅ Get order to check ownership (for shipper)
+      const order = await orderModel.getOrderById(id);
+      if (!order) {
+        return res.status(404).json({
+          success: false,
+          message: 'Không tìm thấy đơn hàng',
+        });
+      }
+
+      // ✅ PERMISSION CHECK
+      if (userRole === 'admin') {
+        // Admin can upload proof for any order
+        console.log(`✅ Admin #${userId} uploading proof for order #${id}`);
+      } else if (userRole === 'shipper') {
+        // Shipper can only upload proof for orders assigned to them
+        if (order.shipper_id !== userId) {
+          return res.status(403).json({
+            success: false,
+            message: 'Bạn không có quyền upload ảnh xác nhận cho đơn hàng này',
+          });
+        }
+
+        // ✅ Shipper can only upload proof for delivered orders (or when delivering)
+        if (order.status !== 'delivered' && order.status !== 'in_transit') {
+          return res.status(400).json({
+            success: false,
+            message: 'Chỉ có thể upload ảnh xác nhận khi đang giao hàng hoặc đã giao hàng',
+          });
+        }
+
+        console.log(`✅ Shipper #${userId} uploading proof for order #${id}`);
+      } else {
+        return res.status(403).json({
+          success: false,
+          message: 'Bạn không có quyền upload ảnh xác nhận',
         });
       }
 

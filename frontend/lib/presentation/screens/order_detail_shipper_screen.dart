@@ -14,6 +14,8 @@ import '../../data/providers/auth_provider.dart';
 import '../../data/services/image_picker_service.dart';
 import '../../data/services/navigation_service.dart';
 import '../widgets/custom_button.dart';
+import '../widgets/package_info_card.dart'; // ✅ NEW: Import Package Info Card
+import '../widgets/admin/admin_action_sheet.dart'; // ✅ NEW: Admin actions
 import '../widgets/location_stepper.dart';
 import '../widgets/status_badge.dart';
 import '../widgets/map_widget.dart';
@@ -152,8 +154,18 @@ class _OrderDetailShipperScreenState extends State<OrderDetailShipperScreen> {
                                 _buildProgressIndicator(),
                                 const SizedBox(height: 10),
 
+                                // ✅ NEW: Package Info Card (Category + Weight)
+                                PackageInfoCard(
+                                  order: _currentOrder,
+                                  showDistance: true,
+                                  showPricing: false, // Earnings card shows pricing for shipper
+                                ),
+
                                 if (_currentOrder.hasPricing && _currentOrder.shipperId != null)
                                   _buildEarningsSection(),
+
+                                // ✅ NEW: Admin Actions (if admin user)
+                                _buildAdminActionsSection(),
 
                                 // ✅ NEW: Warning banner for offline shipper viewing pending order
                                 _buildOfflineWarningBanner(),
@@ -1016,7 +1028,7 @@ class _OrderDetailShipperScreenState extends State<OrderDetailShipperScreen> {
     }
 
     try {
-      await orderProvider.acceptOrder(_currentOrder.id, authProvider.user!.id);
+      await orderProvider.acceptOrder(_currentOrder.id); // ✅ FIXED: No shipperId needed
       if (!mounted) return;
       CherryToast.success(
         title: const Text('Đã nhận đơn hàng!'),
@@ -1113,13 +1125,22 @@ class _OrderDetailShipperScreenState extends State<OrderDetailShipperScreen> {
         builder: (ctx) => const Center(child: CircularProgressIndicator()),
       );
 
-      await orderProvider.uploadProof(_currentOrder.id, base64Image);
+      // ✅ FIXED: Update status to delivered AND upload proof image
+      await orderProvider.updateOrderStatus(
+        _currentOrder.id,
+        'delivered',
+        notes: 'Shipper đã giao hàng',
+        photoUrl: base64Image, // ✅ Upload proof image with status update
+      );
 
       if (!mounted) return;
       Navigator.of(context).pop();
 
       if (!mounted) return;
-      CherryToast.success(title: const Text('Hoàn thành giao hàng!')).show(context);
+      CherryToast.success(
+        title: const Text('Hoàn thành giao hàng!'),
+        description: const Text('Đơn hàng đã được giao thành công'),
+      ).show(context);
 
       await _refreshOrder();
     } catch (e) {
@@ -1162,6 +1183,99 @@ class _OrderDetailShipperScreenState extends State<OrderDetailShipperScreen> {
     } else {
       return await _imagePickerService.pickImageFromGallery();
     }
+  }
+
+  // ✅ NEW: Admin Actions Section
+  Widget _buildAdminActionsSection() {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final user = authProvider.user;
+
+    // Only show for admin users
+    if (user == null || !user.isAdmin) {
+      return const SizedBox.shrink();
+    }
+
+    // Only show for orders that can be modified
+    if (_currentOrder.status == 'delivered' || 
+        _currentOrder.status == 'cancelled') {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF9C27B0).withAlpha(25), // Purple
+            const Color(0xFF9C27B0).withAlpha(13),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF9C27B0).withAlpha(76),
+          width: 2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          const Row(
+            children: [
+              Icon(
+                Icons.admin_panel_settings,
+                color: Color(0xFF9C27B0),
+                size: 24,
+              ),
+              SizedBox(width: 12),
+              Text(
+                'Hành động Admin',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: textDark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Action Button
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (ctx) => AdminActionSheet(order: _currentOrder),
+                ).then((_) {
+                  // Refresh order after admin action
+                  _refreshOrder();
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF9C27B0),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(Icons.settings),
+              label: const Text(
+                'Quản lý đơn hàng',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _makePhoneCall(String phoneNumber) async {

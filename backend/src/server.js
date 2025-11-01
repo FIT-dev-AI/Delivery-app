@@ -12,6 +12,7 @@ const orderRoutes = require('./routes/orderRoutes');
 const locationRoutes = require('./routes/locationRoutes');
 const statsRoutes = require('./routes/statsRoutes');
 const userRoutes = require('./routes/userRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -33,6 +34,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/tracking', locationRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/admin', adminRoutes);
 
 // ... (phần Socket.io events của bạn giữ nguyên) ...
 io.on('connection', (socket) => {
@@ -55,7 +57,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.log('📴 Client ngắt kết nối:', socket.id);
+    console.log('🔴 Client ngắt kết nối:', socket.id);
   });
 });
 
@@ -72,7 +74,7 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 3000;
 // ... (phần khởi động server của bạn giữ nguyên) ...
-// 🌐 Lấy IP address của máy để hiển thị
+// 🌍 Lấy IP address của máy để hiển thị
 const os = require('os');
 function getLocalIP() {
   const interfaces = os.networkInterfaces();

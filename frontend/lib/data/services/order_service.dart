@@ -103,12 +103,28 @@ class OrderService {
     }
   }
 
-  // Phân công shipper
+  // ✅ NEW: Shipper accepts order (self-assign)
+  Future<void> acceptOrder(int orderId) async {
+    try {
+      final response = await _api.put(
+        '${ApiEndpoints.orders}/$orderId/accept',
+        data: {},
+      );
+
+      if (response.statusCode != 200 || !(response.data['success'])) {
+        throw Exception(response.data['message'] ?? 'Không thể nhận đơn hàng');
+      }
+    } catch (e) {
+      throw Exception('Lỗi nhận đơn hàng: ${e.toString()}');
+    }
+  }
+
+  // ✅ UPDATED: Admin reassign shipper (requires shipper_id in body)
   Future<void> assignShipper(int orderId, int shipperId) async {
     try {
       final response = await _api.put(
         '${ApiEndpoints.orders}/$orderId/assign',
-        data: {'shipperId': shipperId},
+        data: {'shipper_id': shipperId}, // ✅ FIXED: Use shipper_id (not shipperId)
       );
 
       if (response.statusCode != 200 || !(response.data['success'])) {

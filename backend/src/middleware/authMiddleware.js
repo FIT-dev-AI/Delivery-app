@@ -64,7 +64,23 @@ const authorize = (...roles) => {
   };
 };
 
+/**
+ * Check if user is admin
+ */
+const isAdmin = (req, res, next) => {
+  if (!req.user) {
+    return next(new ApiError(401, 'Vui lòng đăng nhập'));
+  }
+
+  if (req.user.role !== 'admin') {
+    return next(new ApiError(403, 'Chỉ Admin mới có quyền truy cập'));
+  }
+
+  next();
+};
+
 module.exports = {
   authenticate,
   authorize,
+  isAdmin,
 };
